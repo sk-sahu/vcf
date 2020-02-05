@@ -1,0 +1,71 @@
+---
+title: "Extract Accepted Mutation"
+author: "Sangram"
+date: "05/02/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+> **TASK:** Extract accepted mutations from a VCF file based on positions in corresponding BED file.
+
+## Read Data
+
+### Read BED file
+```{r read_bed_data}
+bed_file <- "data/truseq.bed"
+bed_data <- read.table(bed_file, header = F)
+names(bed_data) <- c("chr", "start", "end")
+head(bed_data)
+```
+
+### Read VCF file
+```{r read_vcf_data}
+vcf_file <- "data/mutect_immediate.vcf"
+tmp_vcf<-readLines(vcf_file)
+vcf_data<-read.table(vcf_file, stringsAsFactors = FALSE)
+tmp_vcf<-tmp_vcf[-(grep("#CHROM",tmp_vcf)+1):-(length(tmp_vcf))]
+vcf_names<-unlist(strsplit(tmp_vcf[length(tmp_vcf)],"\t"))
+names(vcf_data)<-vcf_names
+head(vcf_data)
+```
+
+## Primary Filter
+In primary filter only extract the mutations with `FILTER == "PASS"`
+```{r primary_filter}
+vcf_data_passed <- vcf_data[vcf_data$FILTER == 'PASS',]
+head(vcf_data_passed)
+```
+
+## Final filter
+In final filter extract mutations matching with positions in BED file.
+```{r final_filter}
+extracted_vcf_data <- data.frame()
+for(n in 1:nrow(vcf_data_passed)){
+  mutation <- vcf_data_passed[n,]
+  for(m in 1:nrow(bed_data)){
+    if(mutation$`#CHROM` == bed_data[m,]$chr){
+      if(mutation$POS > bed_data[m,]$start & mutation$POS < bed_data[m,]$end){
+        extracted_vcf_data <- rbind(extracted_vcf_data, mutation)
+      }
+    }
+  }
+}
+names(extracted_vcf_data) <- names(vcf_data)
+head(extracted_vcf_data)
+```
+
+## Mutation Numbers
+```{r stats}
+message("Total Mutations before filtering: ", nrow(vcf_data), "\n",
+  "Total Mutations only with PASS tag: ", nrow(vcf_data_passed), "\n",
+  "Total accepted mutations (match position from BED file): ", nrow(extracted_vcf_data))
+```
+
+## Write file in Excel format
+```{r write_xls}
+suppressPackageStartupMessages(library(xlsx))
+write.xlsx(extracted_vcf_data, "output/accepted.xls", row.names = F)
+```
